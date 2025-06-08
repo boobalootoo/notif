@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Bungee Alice</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body{font-family:'Inter',sans-serif;background-color:#f0f4f8;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;overflow:hidden}
+        .app-container{display:flex;flex-direction:column;align-items:center;width:100%;height:100vh;position:relative}
+        .card-section{background-color:#fff;border-radius:1rem;box-shadow:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -2px rgba(0,0,0,.05);overflow:hidden;width:80%;max-width:600px;padding:1.5rem;box-sizing:border-box}
+        #taskPlannerSection{min-height:500px;display:flex;flex-direction:column;justify-content:center;align-items:center}
+        .bungee-jumper{transition:transform 1s ease-in-out,opacity 1s ease-in-out;transform-origin:center top}
+        .bungee-jumper.diving{transform:translateY(150vh) rotate(360deg);opacity:0}
+        .task-block{min-width:20px;flex-grow:1;flex-shrink:1;transition:background-color .3s ease;box-sizing:border-box}
+        .task-block.dragging{opacity:.5;border:2px dashed #93c5fd}
+        .task-block.drag-over-left{border-left:3px solid #6366f1}
+        .task-block.drag-over-right{border-right:3px solid #6366f1}
+        .resize-handle{background-color:rgba(0,0,0,.2);transition:background-color .2s ease}
+        .resize-handle:hover{background-color:rgba(0,0,0,.4)}
+        .resizing-cursor{cursor:ew-resize!important}
+        #trashCan{transition:all .3s ease}
+        #trashCan.drag-over-trash{background-color:#ef4444;color:#fff;transform:scale(1.1)}
+        #gradientSection{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:80%;max-width:600px;height:80vh;max-height:700px;padding:0;display:none;flex-direction:row;justify-content:center;align-items:stretch;overflow:hidden}
+        .left-gradient{flex-grow:1;display:flex;flex-direction:column;position:relative;overflow:hidden}
+        .background-scroller{position:absolute;top:0;left:0;width:100%;display:flex;flex-direction:column}
+        .bungee-jumper-image{position:absolute;left:50%;top:0;transform:translateX(-50%);width:auto;height:40%;opacity:.8;z-index:10}
+        .right-gradient{width:80px;display:flex;flex-direction:column;border-left:1px solid rgba(0,0,0,.1);position:relative;overflow:hidden}
+        .bungee-jumper-image-small{position:absolute;left:50%;transform:translateX(-50%);width:auto;height:8%;opacity:.8;z-index:10}
+        .color-block-left{flex-shrink:0;width:100%;border-bottom:1px solid rgba(0,0,0,.1)}
+        .color-block-left:last-child{border-bottom:none}
+        .color-block-right{flex-grow:1;min-height:5px;border-bottom:1px solid rgba(0,0,0,.05)}
+        .color-block-right:last-child{border-bottom:none}
+        /* Style for the new black task markers on the right gradient */
+        .task-marker-right {
+            position: absolute;
+            left: 0;
+            width: 100%;
+            height: 1px; /* Very thin line */
+            background-color: black;
+            z-index: 12; /* Ensure it's above other elements */
+            pointer-events: none; /* Make it non-interactive */
+        }
+        .task-marker-right span {
+            position: absolute;
+            right: 2px; /* Position label to the right */
+            top: -6px; /* Adjust vertical position */
+            color: black;
+            font-size: 0.5rem; /* Smaller font for conciseness */
+            text-shadow: 0.5px 0.5px 1px white; /* Subtle shadow for readability */
+            white-space: nowrap;
+            opacity: 0.7; /* Slightly transparent */
+        }
+        /* Style for left task markers */
+        .task-marker-left {
+            position: absolute;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background-color: white;
+            z-index: 11;
+            pointer-events: none;
+        }
+        .task-marker-left span {
+            position: absolute;
+            left: 5px;
+            top: -10px;
+            color: white;
+            font-size: 0.75rem;
+            text-shadow: 1px 1px 2px black;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div id="taskPlannerSection" class="card-section">
+            <button id="helpButton" class="absolute top-4 left-4 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out">help</button>
+            <div id="helpModal" class="hidden fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50 p-4">
+                <div class="bg-white rounded-lg p-6 max-w-sm w-full shadow-xl">
+                    <h3 class="text-xl font-bold mb-4 text-gray-900">How to Use Bungee Alice</h3>
+                    <p class="text-gray-700 mb-4">This site helps you work in 25-minute increments, inspired by the Pomodoro Technique.</p>
+                    <ul class="list-disc list-inside text-gray-700 mb-4">
+                        <li>Type your task in the text box.</li><li>Click the '+' button to add it to the timeline.</li>
+                        <li>Tasks will split the 25 minutes evenly by default.</li>
+                        <li><b>Drag the vertical lines between task blocks</b> to adjust their duration.</li>
+                        <li><b>Drag and drop the task blocks themselves</b> to reorder them.</li>
+                        <li><b>Drag a task block onto the trash can</b> to delete it.</li>
+                        <li>Click 'DIVE IN' to start your focused work session!</li>
+                    </ul>
+                    <button id="closeHelpModal" class="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg w-full shadow-md transition duration-300 ease-in-out">Got It!</button>
+                </div>
+            </div>
+
+            <!-- New Task Completion Modal -->
+            <div id="taskCompletionModal" class="hidden fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50 p-4">
+                <div class="bg-white rounded-lg p-6 max-w-sm w-full shadow-xl text-center">
+                    <h3 class="text-2xl font-bold mb-4 text-gray-900">Task Completed!</h3>
+                    <p class="text-gray-700 text-lg mb-2">Did you complete "<span id="completedTaskName" class="font-semibold text-indigo-700"></span>" (<span id="completedTaskDuration" class="font-semibold text-indigo-700"></span>)?</p>
+                    <p id="nextTaskInfo" class="text-gray-600 mb-6 text-base"></p>
+                    <div class="flex justify-center space-x-4">
+                        <button id="taskYesButton" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg shadow-md transition duration-300 ease-in-out">Yes!</button>
+                        <button id="taskNoButton" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg shadow-md transition duration-300 ease-in-out">No</button>
+                    </div>
+                </div>
+            </div>
+            <!-- End New Task Completion Modal -->
+
+
+            <div class="w-48 sm:w-64 md:w-80 h-auto mb-6 flex justify-center items-center overflow-hidden">
+                <img id="bungeeJumper" src="https://raw.githubusercontent.com/boobalootoo/bungeealice/refs/heads/main/jump-removebg-preview.png" alt="Bungee jumping character silhouette" class="bungee-jumper w-full h-full object-contain" onerror="this.onerror=null;this.src='https://placehold.co/300x400/CCCCCC/333333?text=Image+Not+Found';">
+            </div>
+            <div class="flex items-center w-full mb-6">
+                <input type="text" id="mainTaskInput" placeholder="Type what you want to do in the next 25 minutes" class="flex-grow p-3 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm text-gray-800"/>
+                <button id="addTaskButton" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold p-3 rounded-r-lg shadow-md transition duration-300 ease-in-out">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                </button>
+            </div>
+            <div class="flex items-center w-full mb-2">
+                <div id="tasksContainer" class="flex flex-row items-stretch h-24 flex-grow bg-gray-200 rounded-l-lg overflow-hidden relative border border-gray-300"></div>
+                <div id="trashCan" class="flex-shrink-0 w-16 h-24 flex items-center justify-center bg-gray-300 rounded-r-lg ml-1 border border-gray-300 cursor-pointer text-gray-600 hover:bg-gray-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </div>
+            </div>
+            <div class="time-markers flex justify-between w-full max-w-md px-2 text-lg text-gray-600 font-semibold mb-8">
+                <span>00</span><span>05</span><span>10</span><span>15</span><span>20</span><span>25</span>
+            </div>
+            <button id="diveInButton" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-6 rounded-lg text-xl uppercase tracking-wider shadow-lg transform hover:scale-105 transition duration-300 ease-in-out">DIVE IN</button>
+        </div>
+        <div id="gradientSection" class="card-section">
+            <div class="left-gradient" id="leftGradient">
+                <div class="background-scroller" id="backgroundScroller"></div>
+                <img id="largeJumper" src="https://raw.githubusercontent.com/boobalootoo/bungeealice/refs/heads/main/jump-removebg-preview.png" alt="Bungee Jumper Silhouette Large" class="bungee-jumper-image" onerror="this.onerror=null;this.src='https://placehold.co/300x400/CCCCCC/333333?text=Image+Not+Found';">
+            </div>
+            <div class="right-gradient" id="rightGradient">
+                <img id="smallJumper" src="https://raw.githubusercontent.com/boobalootoo/bungeealice/refs/heads/main/jump-removebg-preview.png" alt="Bungee Jumper Silhouette Small" class="bungee-jumper-image-small" onerror="this.onerror=null;this.src='https://placehold.co/300x400/CCCCCC/333333?text=Image+Not+Found';">
+            </div>
+        </div>
+    </div>
+    <script>
+        function hexToRgb(hex){const bigint=parseInt(hex.slice(1),16);return{r:(bigint>>16)&255,g:(bigint>>8)&255,b:bigint&255}}
+        function rgbToHex(r,g,b){return"#"+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1).padStart(6,'0').toUpperCase()}
+        function generateGradient(startHex,endHex,steps){
+            const startRgb=hexToRgb(startHex),endRgb=hexToRgb(endHex),colors=[];
+            for(let i=0;i<steps;i++){
+                const factor=steps===1?0:i/(steps-1);
+                const r=Math.round(startRgb.r+factor*(endRgb.r-startRgb.r));
+                const g=Math.round(startRgb.g+factor*(endRgb.g-startRgb.g));
+                const b=Math.round(startRgb.b+factor*(endRgb.b-startRgb.b));
+                colors.push(rgbToHex(r,g,b));
+            }
+            return colors;
+        }
+
+        const taskPlanner=(function(){
+            const D=document,
+            helpButton=D.getElementById('helpButton'),helpModal=D.getElementById('helpModal'),closeHelpModal=D.getElementById('closeHelpModal'),addTaskButton=D.getElementById('addTaskButton'),
+            tasksContainer=D.getElementById('tasksContainer'),mainTaskInput=D.getElementById('mainTaskInput'),diveInButton=D.getElementById('diveInButton'),bungeeJumper=D.getElementById('bungeeJumper'),
+            trashCan=D.getElementById('trashCan'),taskPlannerSection=D.getElementById('taskPlannerSection');
+
+            let tasks=[],colorIndex=0,draggedItem=null;
+            const COLORS=['#ef4444','#f97316','#facc15','#22c55e','#06b6d4','#3b82f6','#6366f1'];
+            let isResizing=false,currentBlock=null,nextBlock=null,currentTaskData=null,nextTaskData=null,startX=0,startWidthCurrent=0,startWidthNext=0;
+            let timelineNeedsRender = false; // New flag to control rendering after drag-and-drop
+
+            // Declaring functions at the top of the IIFE for proper hoisting
+            const getNextColor=()=>COLORS[colorIndex++%COLORS.length];
+            const clearDragOverClasses=()=>{D.querySelectorAll('.task-block').forEach(b=>b.classList.remove('drag-over-left','drag-over-right'));trashCan.classList.remove('drag-over-trash')};
+            
+            function renderTimeline(){
+                tasksContainer.innerHTML='';D.body.classList.remove('resizing-cursor');
+                tasks.forEach((task,idx)=>{
+                    const taskBlock=D.createElement('div');
+                    taskBlock.id=task.id;
+                    taskBlock.className='task-block flex flex-col justify-center items-center text-white text-sm font-semibold relative group overflow-hidden whitespace-nowrap truncate px-2';
+                    taskBlock.style.backgroundColor=task.color;
+                    taskBlock.style.flexBasis=`${(task.duration/25)*100}%`;taskBlock.style.minWidth='20px';taskBlock.draggable=true;
+
+                    const taskNameDiv=D.createElement('div');taskNameDiv.className='p-1 text-center';taskNameDiv.textContent=task.name;taskBlock.appendChild(taskNameDiv);
+                    const taskDurDiv=D.createElement('div');taskDurDiv.className='text-xs font-normal text-gray-100';taskDurDiv.textContent=`${task.duration.toFixed(1)} min`;taskBlock.appendChild(taskDurDiv);
+
+                    if(idx<tasks.length-1){
+                        const resizeHandle=D.createElement('div');resizeHandle.className='resize-handle absolute top-0 right-0 bottom-0 w-2 cursor-ew-resize z-10';taskBlock.appendChild(resizeHandle);
+                        resizeHandle.addEventListener('mousedown',e=>{
+                            isResizing=true;currentBlock=taskBlock;nextBlock=taskBlock.nextSibling;currentTaskData=tasks[idx];nextTaskData=tasks[idx+1];
+                            startX=e.clientX;startWidthCurrent=currentBlock.offsetWidth;startWidthNext=nextBlock.offsetWidth;
+                            D.addEventListener('mousemove',onMouseMove);D.addEventListener('mouseup',onMouseUp);D.body.classList.add('resizing-cursor');e.preventDefault();
+                        });
+                    }
+                    tasksContainer.appendChild(taskBlock);
+                });
+                D.querySelectorAll('.task-block').forEach(addDragAndDropListeners);
+            }
+
+            const distributeTimeEvenly=()=>{if(tasks.length===0){renderTimeline();return}const dur=25/tasks.length;tasks.forEach(t=>t.duration=dur);renderTimeline()};
+
+            function addDragAndDropListeners(block){
+                block.addEventListener('dragstart',e=>{
+                    draggedItem=block;
+                    setTimeout(()=>block.classList.add('dragging'),0);
+                    e.dataTransfer.setData('text/plain',block.id);
+                    e.dataTransfer.effectAllowed='move'
+                });
+                block.addEventListener('dragend',()=>{
+                    block.classList.remove('dragging');
+                    draggedItem=null;
+                    if (timelineNeedsRender) { // Check the flag here
+                        renderTimeline();
+                        timelineNeedsRender = false; // Reset the flag
+                    }
+                });
+                block.addEventListener('dragover',e=>{
+                    e.preventDefault();const dropTarget=e.target.closest('.task-block'),isOverTrash=e.target.closest('#trashCan');clearDragOverClasses();
+                    if(isOverTrash){trashCan.classList.add('drag-over-trash')}
+                    else if(draggedItem&&dropTarget&&draggedItem!==dropTarget){
+                        const rect=dropTarget.getBoundingClientRect(),offset=e.clientX-rect.left;dropTarget.classList.add(offset<rect.width/2?'drag-over-left':'drag-over-right');
+                    }
+                });
+                block.addEventListener('dragleave',e=>{const tar=e.target.closest('.task-block');if(tar)tar.classList.remove('drag-over-left','drag-over-right');if(!e.relatedTarget||!e.relatedTarget.closest('#trashCan'))trashCan.classList.remove('drag-over-trash')});
+                block.addEventListener('drop',e=>{
+                    e.preventDefault();trashCan.classList.remove('drag-over-trash');
+                    const iTD=e.dataTransfer.getData('text/plain');const idx=tasks.findIndex(t=>t.id===iTD);
+                    if(draggedItem&&isDroppedOnTrash){
+                        if(idx>-1){
+                            tasks.splice(idx,1);
+                            distributeTimeEvenly(); // This already calls renderTimeline
+                            timelineNeedsRender = false; // Ensure flag is false if trash drop
+                        }
+                    }else if(draggedItem&&dropTarget&&draggedItem!==dropTarget){
+                        const dragIdx=tasks.findIndex(t=>t.id===draggedItem.id),dropIdx=tasks.findIndex(t=>t.id===dropTarget.id);
+                        const [removed]=tasks.splice(dragIdx,1);
+                        tasks.splice(e.clientX-dropTarget.getBoundingClientRect().left<dropTarget.offsetWidth/2?dropIdx:dropIdx+1,0,removed);
+                        timelineNeedsRender = true; // Set flag to indicate re-render needed
+                    }
+                });
+            }
+
+            function onMouseMove(e){
+                if(!isResizing)return;const deltaX=e.clientX-startX,cW=tasksContainer.offsetWidth,minPx=20;
+                let newCW=startWidthCurrent+deltaX,newNW=startWidthNext-deltaX;
+                newCW=Math.max(minPx,newCW);newNW=Math.max(minPx,newNW);
+                const curTotW=startWidthCurrent+startWidthNext;
+                if(newCW+newNW!==curTotW){if(newCW===minPx)newNW=curTotW-minPx;else if(newNW===minPx)newCW=curTotW-minPx;}
+                currentBlock.style.flexBasis=`${(newCW/cW)*100}%`;nextBlock.style.flexBasis=`${(newNW/cW)*100}%`;
+                currentTaskData.duration=(newCW/cW)*25;nextTaskData.duration=(newNW/cW)*25; 
+                currentBlock.querySelector('.text-xs').textContent=`${currentTaskData.duration.toFixed(1)} min`;
+                nextBlock.querySelector('.text-xs').textContent=`${nextTaskData.duration.toFixed(1)} min`; 
+            }
+
+            function onMouseUp(){
+                isResizing=false;currentBlock=nextBlock=currentTaskData=nextTaskData=null;
+                D.removeEventListener('mousemove',onMouseMove);D.removeEventListener('mouseup',onMouseUp);D.body.classList.remove('resizing-cursor');
+                renderTimeline();
+            }
+
+            function init(cb){
+                helpButton.onclick=()=>helpModal.classList.remove('hidden');closeHelpModal.onclick=()=>helpModal.classList.add('hidden');
+                addTaskButton.onclick=()=>{
+                    let name=mainTaskInput.value.trim()||`Task ${tasks.length+1}`;
+                    tasks.push({id:`task-${Date.now()}`,name:name,duration:0,color:getNextColor()});
+                    distributeTimeEvenly();mainTaskInput.value='';
+                };
+                diveInButton.onclick=()=>{
+                    bungeeJumper.classList.add('diving');
+                    bungeeJumper.addEventListener('transitionend',()=>{{taskPlannerSection.style.display='none';cb&&cb(tasks);}},{once:true});
+                };
+                trashCan.addEventListener('dragover',e=>{e.preventDefault();trashCan.classList.add('drag-over-trash')});
+                trashCan.addEventListener('dragleave',()=>trashCan.classList.remove('drag-over-trash'));
+                trashCan.addEventListener('drop',e=>{
+                    e.preventDefault();trashCan.classList.remove('drag-over-trash');
+                    const iTD=e.dataTransfer.getData('text/plain');const idx=tasks.findIndex(t=>t.id===iTD);
+                    if(idx>-1){tasks.splice(idx,1);distributeTimeEvenly()}
+                });
+                renderTimeline();
+            }
+            return {init};
+        })();
+
+        const gradientAnimation=(function(){
+            const D=document; 
+            // Declare module-level variables for DOM elements, assigned in initializeAnimation
+            let gradientSection, leftGradientContainer, backgroundScroller, rightGradientContainer, largeJumper, smallJumper;
+            let taskCompletionModal, completedTaskNameSpan, completedTaskDurationSpan, nextTaskInfoP, taskYesButton, taskNoButton;
+
+
+            const segments=[
+                {start:'#5C0000',end:'#E50000'},{start:'#E65C00',end:'#FF9900'},
+                {start:'#E6A300',end:'#FFFF00'},{start:'#008000',end:'#00FF00'},
+                {start:'#005050',end:'#00C0C0'}
+            ];
+
+            let allColors=[],leftColors,rightColors,_tasks=[];
+            let lastTimestamp=0,animationFrameId,currentY_small=0,scrollOffset_large=0,speed_small=0,scrollSpeed_large=0;
+            let leftContH=0,rightContH=0,largeJumperH=0,smallJumperH=0,largeSectH=0,smallSectH=0;
+            let imagesLoadedCount=0;const totalImages=2;
+
+            // Variables for sound and collision detection
+            let smashSound;
+            let leftTaskMarkers = []; // Array to store references to the left task marker DOM elements
+            let markerHitFlags = []; // Flags for the left task markers
+
+            function populateRightGradient(){
+                // Re-fetch rightGradientContainer here to ensure it's always up-to-date, especially on resize
+                rightGradientContainer = D.getElementById('rightGradient'); 
+                rightGradientContainer.querySelectorAll('.color-block-right').forEach(b=>b.remove());
+                // Remove existing task markers before re-adding
+                rightGradientContainer.querySelectorAll('.task-marker-right').forEach(m => m.remove());
+
+                smallSectH=rightGradientContainer.offsetHeight/25;
+                rightColors.forEach(c=>{const d=D.createElement('div');d.className='color-block-right';d.style.height=`${smallSectH}px`;d.style.backgroundColor=c;rightGradientContainer.appendChild(d)});
+                
+                // Add task markers to the right gradient (visual only, not for sound trigger)
+                let cumulativeDuration = 0;
+                _tasks.forEach((task, index) => { 
+                    if (task.duration > 0) {
+                        cumulativeDuration += task.duration;
+                        const markerTopPx = cumulativeDuration * smallSectH; // Use smallSectH for right gradient
+
+                        const markerDiv = D.createElement('div');
+                        markerDiv.className = 'task-marker-right'; // Use the new CSS class
+                        markerDiv.style.top = `${markerTopPx}px`;
+                        markerDiv.dataset.markerIndex = index; // Store index to identify marker
+                        
+                        const labelSpan = D.createElement('span');
+                        labelSpan.textContent = `${task.name} (${task.duration.toFixed(1)} min)`;
+                        markerDiv.appendChild(labelSpan);
+                        rightGradientContainer.appendChild(markerDiv);
+                    }
+                });
+            }
+
+            function showTaskCompletionModal(taskIndex) {
+                console.log("Showing task completion modal for index:", taskIndex);
+                const completedTask = _tasks[taskIndex];
+                const nextTask = _tasks[taskIndex + 1];
+
+                if (completedTask) {
+                    completedTaskNameSpan.textContent = completedTask.name;
+                    completedTaskDurationSpan.textContent = `${completedTask.duration.toFixed(1)} min`;
+                }
+
+                if (nextTask) {
+                    nextTaskInfoP.textContent = `Next up: "${nextTask.name}" (${nextTask.duration.toFixed(1)} min)`;
+                } else {
+                    nextTaskInfoP.textContent = "You've completed all tasks for this session!";
+                }
+                
+                taskCompletionModal.classList.remove('hidden');
+                console.log("Modal display style after removing hidden:", window.getComputedStyle(taskCompletionModal).display);
+            }
+
+            function hideTaskCompletionModal() {
+                console.log("Hiding task completion modal and resuming animation.");
+                taskCompletionModal.classList.add('hidden');
+                animationFrameId = requestAnimationFrame(animate); // Resume animation
+            }
+
+
+            function initializeAnimation(){
+                console.log("Initializing gradient animation...");
+                // Assign module-level variables
+                gradientSection = D.getElementById('gradientSection');
+                leftGradientContainer = D.getElementById('leftGradient');
+                backgroundScroller = D.getElementById('backgroundScroller');
+                rightGradientContainer = D.getElementById('rightGradient');
+                largeJumper = D.getElementById('largeJumper');
+                smallJumper = D.getElementById('smallJumper');
+
+                // Assign new modal elements
+                taskCompletionModal = D.getElementById('taskCompletionModal');
+                completedTaskNameSpan = D.getElementById('completedTaskName');
+                completedTaskDurationSpan = D.getElementById('completedTaskDuration');
+                nextTaskInfoP = D.getElementById('nextTaskInfo');
+                taskYesButton = D.getElementById('taskYesButton');
+                taskNoButton = D.getElementById('taskNoButton');
+
+                // Add event listeners for modal buttons
+                taskYesButton.onclick = () => {
+                    console.log("Yes button clicked. Attempting to play sound.");
+                    // Check if the sound is ready before playing
+                    if (smashSound.readyState >= 2) { // 2 = HAVE_CURRENT_DATA (enough data to play current position)
+                        smashSound.currentTime = 0; // Rewind to start
+                        smashSound.play().catch(e => console.error("Error playing sound on click:", e));
+                    } else {
+                        console.warn("Sound not ready to play (readyState < 2). Current readyState:", smashSound.readyState);
+                        // Optional: try playing after a short delay or listen for 'canplaythrough' if this is a consistent issue
+                        smashSound.addEventListener('canplaythrough', () => {
+                            smashSound.currentTime = 0;
+                            smashSound.play().catch(e => console.error("Error playing sound after canplaythrough:", e));
+                        }, { once: true });
+                    }
+                    hideTaskCompletionModal();
+                };
+                taskNoButton.onclick = () => {
+                    console.log("No button clicked. Not playing sound.");
+                    hideTaskCompletionModal();
+                };
+
+
+                lCH=leftGradientContainer.offsetHeight;rCH=rightGradientContainer.offsetHeight;
+                backgroundScroller.innerHTML='';lSH=lCH/5;
+                leftColors.forEach(c=>{const d=D.createElement('div');d.className='color-block-left';d.style.height=`${lSH}px`;d.style.backgroundColor=c;backgroundScroller.appendChild(d)});
+                backgroundScroller.style.height=`${lSH*25}px`;
+                
+                // Call populateRightGradient for the right side
+                populateRightGradient(); 
+                
+                let cumulativeDuration = 0;
+                // Clear and re-add left gradient markers
+                backgroundScroller.querySelectorAll('.task-marker-left').forEach(m => m.remove());
+                leftTaskMarkers = []; // Reset the array
+                markerHitFlags = new Array(_tasks.length).fill(false); // Reset flags for new tasks
+
+                _tasks.forEach((task, index) => {
+                    if (task.duration > 0) {
+                        cumulativeDuration += task.duration;
+                        const markerTopPx = cumulativeDuration * lSH;
+
+                        const markerDiv = D.createElement('div');
+                        markerDiv.className = 'task-marker-left'; 
+                        markerDiv.style.top = `${markerTopPx}px`;
+                        markerDiv.dataset.markerIndex = index; // Store index to tie to markerHitFlags
+                        
+                        const labelSpan = D.createElement('span');
+                        labelSpan.textContent = `${task.name} (${task.duration.toFixed(1)} min)`;
+                        markerDiv.appendChild(labelSpan);
+                        backgroundScroller.appendChild(markerDiv);
+                        leftTaskMarkers.push(markerDiv); // Store reference to the marker
+                    }
+                });
+                console.log("Left task markers created:", leftTaskMarkers);
+
+
+                largeJumper.style.top='0px';smallJumper.style.top='0px';
+                largeJumperH=largeJumper.offsetHeight;smallJumperH=smallJumper.offsetHeight;
+                scrollOffset_large=0;scrollSpeed_large=lSH/(60*1000);speed_small=smallSectH/(60*1000);
+                lastTimestamp=performance.now();animationFrameId=requestAnimationFrame(animate);
+                console.log("Animation started.");
+            }
+
+            function animate(ts){
+                const dt=ts-lastTimestamp;
+                lastTimestamp=ts;
+
+                const prevScrollOffset_large = scrollOffset_large;
+
+                currentY_small+=speed_small*dt;
+                scrollOffset_large-=scrollSpeed_large*dt;
+                
+                // Collision detection for left task markers hitting the top
+                const triggerPoint = 0; // The top of the scrolling background
+                const detectionOffset = 5; // A few pixels above the actual line to trigger detection
+                const tolerance = scrollSpeed_large * dt * 2; // Tolerance based on movement speed
+
+                leftTaskMarkers.forEach((marker, index) => {
+                    if (!_tasks[index] || _tasks[index].duration === 0) { // Skip if task is invalid or has no duration
+                        return;
+                    }
+                    const markerAbsoluteTop = marker.offsetTop + scrollOffset_large; 
+                    const prevMarkerAbsoluteTop = marker.offsetTop + prevScrollOffset_large;
+
+                    // Check if the marker just crossed the trigger point upwards
+                    if (prevMarkerAbsoluteTop > (triggerPoint + detectionOffset) && markerAbsoluteTop <= (triggerPoint + detectionOffset) + tolerance && !markerHitFlags[index]) {
+                        markerHitFlags[index] = true; // Mark this marker as hit
+                        console.log(`Task marker ${index} hit the top. Pausing animation.`);
+                        cancelAnimationFrame(animationFrameId); // Pause animation
+                        showTaskCompletionModal(index); // Show modal for this task
+                    }
+                });
+
+
+                // Use assigned module-level elements
+                smallJumper.style.top=`${currentY_small}px`;backgroundScroller.style.transform=`translateY(${scrollOffset_large}px)`;
+                
+                // Loop small jumper 
+                if(currentY_small > rCH) {
+                    currentY_small = -smallJumperH;
+                }
+                const tSH=(leftColors.length-5)*lSH;
+                if(Math.abs(scrollOffset_large)>=tSH) {
+                    console.log("Background looped. Resetting marker flags.");
+                    scrollOffset_large=0;
+                    markerHitFlags.fill(false); // Reset all flags when background loops back to top
+                }
+                animationFrameId=requestAnimationFrame(animate);
+            }
+
+            function imageLoadHandler(){
+                imagesLoadedCount++;
+                console.log("Image loaded. Images loaded count:", imagesLoadedCount);
+                if(imagesLoadedCount===totalImages)initializeAnimation();
+            }
+
+            function init(tasksData){
+                console.log("Gradient animation module init called with tasks:", tasksData);
+                _tasks = tasksData || []; 
+                segments.forEach(seg=>{allColors=allColors.concat(generateGradient(seg.start,seg.end,5))});
+                leftColors=allColors;rightColors=allColors;
+                // Assign gradientSection early as it controls visibility
+                gradientSection = D.getElementById('gradientSection');
+                gradientSection.style.display='flex'; 
+                
+                // Initialize sound with the absolute URL and explicitly load
+                smashSound = new Audio('https://raw.githubusercontent.com/boobalootoo/bungeealice/main/smash.wav');
+                smashSound.volume = 0.7; // Set a default volume
+                smashSound.load(); // Explicitly load the audio
+                console.log("Smash sound initialized and loading.");
+
+                // Assigning elements here to ensure they are available for onload checks
+                largeJumper = D.getElementById('largeJumper');
+                smallJumper = D.getElementById('smallJumper');
+
+                // Corrected onload assignments
+                if (largeJumper) largeJumper.onload=imageLoadHandler;
+                if (smallJumper) smallJumper.onload=imageLoadHandler; 
+
+                // Check if images are already complete (e.g., from cache)
+                if(largeJumper && largeJumper.complete && largeJumper.naturalHeight !== 0) {
+                    console.log("Large jumper already loaded.");
+                    imageLoadHandler();
+                }
+                if(smallJumper && smallJumper.complete && smallJumper.naturalHeight !== 0) {
+                    console.log("Small jumper already loaded.");
+                    imageLoadHandler();
+                }
+            }
+
+            function onResize(){
+                console.log("Window resized.");
+                // Use module-level gradientSection
+                if(gradientSection && gradientSection.style.display==='flex'){
+                    cancelAnimationFrame(animationFrameId);imagesLoadedCount=0;
+                    // largeJumper and smallJumper should already be assigned at module level from init, so no need to re-fetch with D.getElementById
+                    if(largeJumper.complete&&largeJumper.naturalHeight!==0)imagesLoadedCount++;
+                    if(smallJumper.complete&&smallJumper.naturalHeight!==0)imagesLoadedCount++;
+                    if(imagesLoadedCount===totalImages)initializeAnimation();else{largeJumper.onload=imageLoadHandler;smallJumper.onload=imageLoadHandler()}
+                }
+            }
+            return {init,onResize};
+        })();
+
+        document.addEventListener('DOMContentLoaded',()=>{{
+            console.log("DOM Content Loaded.");
+            taskPlanner.init(tasks=>{
+                console.log("Tasks passed to gradientAnimation:", tasks);
+                gradientAnimation.init(tasks)
+            });
+            window.addEventListener('resize',()=>gradientAnimation.onResize());
+        }});
+    </script>
+</body>
+</html>
