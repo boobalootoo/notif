@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delayed System Notification</title>
+    <!-- Load Tailwind CSS for simple styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for the Inter font and overall layout */
+        body {
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f4f8; /* Light blue-gray background */
+            margin: 0;
+            padding: 1rem;
+        }
+        .container {
+            background-color: #ffffff; /* White background for the container */
+            padding: 2rem;
+            border-radius: 1rem; /* More rounded corners */
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); /* Soft shadow */
+            text-align: center;
+            max-width: 90%;
+            width: 400px; /* Fixed width for better appearance */
+        }
+        .message {
+            margin-top: 1.5rem;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            font-size: 0.9rem;
+            /* Default background and text colors, will be updated by JS */
+            background-color: #e2e8f0;
+            color: #4a5568;
+        }
+
+        /* Slider styling */
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 8px;
+            background: #d1d5db; /* Light gray track */
+            border-radius: 5px;
+            outline: none;
+            opacity: 0.7;
+            transition: opacity .2s;
+            margin-top: 1rem;
+        }
+        input[type="range"]:hover {
+            opacity: 1;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #2563eb; /* Blue thumb */
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #2563eb; /* Blue thumb */
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="container flex flex-col items-center">
+        <h1 class="text-2xl font-bold text-gray-800 mb-6">Delayed System Notification</h1>
+
+        <div class="w-full mb-4">
+            <label for="timeSlider" class="block text-gray-700 text-sm font-bold mb-2">
+                Set Notification Time: <span id="selectedTime">60</span> seconds
+            </label>
+            <input type="range" id="timeSlider" min="5" max="300" value="60">
+        </div>
+
+        <button id="notifyButton"
+                class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg
+                       shadow-md transition duration-300 ease-in-out transform hover:scale-105
+                       focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75">
+            Start Notification Timer
+        </button>
+
+        <div id="countdownDisplay" class="text-xl font-semibold text-gray-700 mt-4 hidden">
+            Time remaining: <span id="countdownSeconds"></span> seconds
+        </div>
+
+        <div id="messageBox" class="message hidden">
+            <!-- Message will appear here -->
+        </div>
+    </div>
+
+    <script>
+        // Get references to all necessary HTML elements
+        const notifyButton = document.getElementById('notifyButton');
+        const messageBox = document.getElementById('messageBox');
+        const timeSlider = document.getElementById('timeSlider');
+        const selectedTimeSpan = document.getElementById('selectedTime');
+        const countdownDisplay = document.getElementById('countdownDisplay');
+        const countdownSecondsSpan = document.getElementById('countdownSeconds');
+
+        // Variables to manage the timer and delay
+        let notificationDelay = parseInt(timeSlider.value, 10) * 1000; // Default 60 seconds, converted to milliseconds
+        let countdownInterval; // Stores the interval ID for the countdown display
+        let timeoutId; // Stores the timeout ID for the main notification trigger
+
+        /**
+         * Displays a message in the designated message box area.
+         * @param {string} text - The message to display.
+         * @param {'info' | 'success' | 'error'} type - The type of message, influences styling.
+         */
+        function displayMessage(text, type = 'info') {
+            messageBox.textContent = text;
+            messageBox.classList.remove('hidden');
+            // Remove previous type-specific classes
+            messageBox.classList.remove('bg-red-200', 'text-red-800', 'bg-green-200', 'text-green-800', 'bg-e2e8f0', 'text-4a5568');
+
+            // Add new type-specific classes for styling
+            if (type === 'error') {
+                messageBox.classList.add('bg-red-200', 'text-red-800');
+            } else if (type === 'success') {
+                messageBox.classList.add('bg-green-200', 'text-green-800');
+            } else { // info
+                messageBox.classList.add('bg-e2e8f0', 'text-4a5568');
+            }
+        }
+
+        /**
+         * Updates the displayed time from the slider and the internal notification delay.
+         * If a timer is active, it prompts the user to restart it.
+         */
+        function updateSelectedTime() {
+            selectedTimeSpan.textContent = timeSlider.value;
+            notificationDelay = parseInt(timeSlider.value, 10) * 1000; // Update delay in milliseconds
+            if (countdownInterval) { // If a timer is already running
+                displayMessage('Timer time updated. Click "Start Notification Timer" again to restart.', 'info');
+                resetTimer(); // Clear existing timers
+            }
+        }
+
+        /**
+         * Starts the countdown timer and schedules the system notification.
+         */
+        function startCountdown() {
+            // Check if the Notification API is supported by the browser
+            if (!('Notification' in window)) {
+                displayMessage('This browser does not support desktop notifications.', 'error');
+                console.error('Notification API not supported.');
+                return;
+            }
+
+            // Request permission to show notifications
+            Notification.requestPermission().then(permission => {
+                if (permission === 'granted') {
+                    // Permission granted, proceed to schedule
+                    let remainingTime = notificationDelay / 1000; // Convert delay from milliseconds to seconds
+                    countdownSecondsSpan.textContent = remainingTime;
+                    countdownDisplay.classList.remove('hidden'); // Show the countdown element
+                    displayMessage(`Notification scheduled for ${remainingTime} seconds from now!`, 'success');
+                    notifyButton.disabled = true; // Disable the button to prevent multiple timers
+
+                    // Set an interval to update the countdown display every second
+                    countdownInterval = setInterval(() => {
+                        remainingTime--;
+                        countdownSecondsSpan.textContent = remainingTime;
+
+                        if (remainingTime <= 0) {
+                            clearInterval(countdownInterval); // Stop the countdown interval
+                            countdownDisplay.classList.add('hidden'); // Hide the countdown display
+                            // Show the system notification
+                            new Notification('Attention!', {
+                                body: 'Your important pop-up message!',
+                                icon: 'https://placehold.co/64x64/ef4444/ffffff?text=🔔' // Red background, white bell icon
+                            });
+                            console.log('System notification displayed.');
+                            notifyButton.disabled = false; // Re-enable the start button
+                            displayMessage('Notification displayed!', 'success');
+                        }
+                    }, 1000); // Update every 1000ms (1 second)
+
+                    // Set a timeout for the actual notification to appear after the full delay
+                    timeoutId = setTimeout(() => {
+                        // The notification display is handled by the setInterval's check for remainingTime <= 0.
+                        // This setTimeout primarily ensures the correct total delay if setInterval runs slightly off.
+                    }, notificationDelay);
+
+                } else if (permission === 'denied') {
+                    // Permission denied by the user
+                    displayMessage('Notification permission denied. Cannot schedule notification.', 'error');
+                    console.warn('Notification permission denied.');
+                } else {
+                    // Permission remains default (user closed the prompt without selecting)
+                    displayMessage('Notification permission request ignored. Please allow notifications.', 'info');
+                    console.log('Notification permission request ignored.');
+                }
+            }).catch(error => {
+                console.error('Error requesting notification permission:', error);
+                displayMessage('An error occurred while requesting notification permission.', 'error');
+            });
+        }
+
+        /**
+         * Resets and clears any active timers (countdown interval and main timeout).
+         */
+        function resetTimer() {
+            clearInterval(countdownInterval); // Clear the countdown interval
+            clearTimeout(timeoutId); // Clear the main notification timeout
+            countdownDisplay.classList.add('hidden'); // Hide countdown display
+            notifyButton.disabled = false; // Re-enable the button
+            messageBox.classList.add('hidden'); // Hide any previous messages
+        }
+
+        // --- Event Listeners ---
+
+        // When the "Start Notification Timer" button is clicked
+        notifyButton.addEventListener('click', () => {
+            resetTimer(); // Ensure any previous timers are cleared
+            startCountdown(); // Start the new timer
+        });
+
+        // When the slider value changes
+        timeSlider.addEventListener('input', updateSelectedTime);
+
+        // Initialize the displayed selected time with the default slider value when the page loads
+        updateSelectedTime();
+    </script>
+</body>
+</html>
